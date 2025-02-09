@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Welcome, {{ username }}!</h1>
+        <div class="top-buttons">
+            <a href="{{ url_for('profile') }}" class="btn">Profile</a>
+            <a href="{{ url_for('history') }}" class="btn">History</a>
+            <a href="{{ url_for('logout') }}" class="btn">Logout</a>
+        </div>
+    </header>
+
+    <!-- File Upload Section -->
+    <section class="file-upload-section">
+        <h2>Upload Pentest Report</h2>
+        <div id="drop-area">
+            <form id="upload-form" class="upload-form" action="{{ url_for('upload_file') }}" method="POST" enctype="multipart/form-data">
+                <input type="file" id="fileElem" name="pentest_file" accept=".txt,.pdf,.xml,.html" onchange="handleFiles(this.files)">
+                <label class="file-drop-label" for="fileElem">Drag & Drop your file here or click to select</label>
+                <button id="uploadBtn" type="submit" class="submit-btn" disabled>Upload and Analyze</button>
+            </form>
+        </div>
+
+        <!-- Progress Bar -->
+        <div id="progress-container" style="display: none;">
+            <div id="progress-bar">
+                <div id="progress-fill"></div>
+            </div>
+            <p id="time-remaining"></p>
+        </div>
+    </section>
+
+    <!-- CVE Results Section -->
+    <section class="cve-results" style="display: none;">
+        <h2>Extracted CVEs</h2>
+        <ul id="cve-list"></ul>
+    </section>
+
+    <!-- Vulnerabilities Section -->
+    <section id="vulnerabilities" style="display: none;">
+        <h2>Identified Vulnerabilities</h2>
+    </section>
+
+    <script>
+        const uploadForm = document.getElementById("upload-form");
+        const uploadBtn = document.getElementById("uploadBtn");
+        const progressContainer = document.getElementById("progress-container");
+        const progressFill = document.getElementById("progress-fill");
+        const timeRemaining = document.getElementById("time-remaining");
+        const cveResultsSection = document.querySelector('.cve-results');
+        
+        let startTime;
+        let totalSize;
+
+        function handleFiles(files) {
+            uploadBtn.disabled = false;
+        }
+
+        uploadForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+            uploadBtn.disabled = true;
+
+            const fileElem = document.getElementById("fileElem").files[0];
+            if (!fileElem) {
+                return;
+            }
+
+            totalSize = fileElem.size;
+            startTime = new Date().getTime();
+
+            const formData = new FormData(uploadForm);
+            progressContainer.style.display = "block";
+
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", uploadForm.action, true);
+
+            xhr.upload.onprogress = function (event) {
+                const percentComplete = Math.round((event.loaded / event.total) * 100);
+                progressFill.style.width = percentComplete + "%";
+
+                // Calculate remaining time
+                const elapsedTime = (new Date().getTime() - startTime) / 1000;
+                const uploadSpeed = event.loaded / elapsedTime;
+                const remainingTime = (totalSize - event.loaded) / uploadSpeed;
+                timeRemaining.textContent = `Time remaining: ${Math.round(remainingTime)} seconds`;
+            };
+
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    try {
+                        const responseData = JSON.parse(xhr.responseText);
+                        console.log(responseData); 
+                        if (responseData.vuls) {
+                            displayVulnerabilities(responseData.vuls); // Display vulnerabilities
+                        } else {
+                            console.error('No vulnerabilities found in the response');
+                        }
+                    } catch (error) {
+                        console.error('Error parsing response:', error);
+                    }
+                } else { 
+                    console.error('Failed with status:', xhr.status);
+                }
+            };
+
+            xhr.onerror = function () {
+                timeRemaining.textContent = "Upload failed!";
+            };
+
+            xhr.send(formData);
+        });
+
+        function displayVulnerabilities(vuls) {
+            const vulnSection = document.getElementById('vulnerabilities');
+            vulnSection.style.display = 'block';  // Make the vulnerabilities section visible
+            vulnSection.innerHTML = '';  // Clear any previous vulnerabilities
+
+            // Loop through the vulnerabilities and display each one
+            vuls.forEach(function(vul) {
+                vulnSection.innerHTML += `
+                    <div class="vuln-item">
+                        <h3>${vul.cve}</h3>
+                        <p><strong>Description:</strong> ${vul.description}</p>
+                        <p><strong>Date Found:</strong> ${vul.date_found}</p>
+                        <p><strong>Systems Affected:</strong> ${vul.systems_affected}</p>
+                        <p><strong>Severity Rating:</strong> ${vul.severity_rating}</p>
+                        <p><strong>Remediation Plan:</strong> ${vul.remediation_plan}</p>
+                        <p><strong>Cost Estimate:</strong> ${vul.cost_estimate}</p>
+                        <p><strong>Profession Needed:</strong> ${vul.profession_needed}</p>
+                    </div>
+                    <hr />
+                `;
+            });
+        }
+
+        function displayResults(cves) {
+            cveResultsSection.style.display = "block";
+            const cveList = document.getElementById('cve-list');
+            cveList.innerHTML = '';
+
+            if (Array.isArray(cves) && cves.length > 0) {
+                cves.forEach(function (cve) {
+                    cveList.innerHTML += `<li>${cve.cve}: ${cve.description} (Category: ${cve.category})</li>`;
+                });
+            } else {
+                console.error("CVE data format incorrect or empty:", cves);
+                cveList.innerHTML = '<li>No CVEs found or data format is incorrect.</li>';
+            }
+        }
+    </script>
+</body>
+</html>
